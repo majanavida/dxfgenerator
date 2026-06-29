@@ -16,12 +16,6 @@ class NotesHolderParameters:
     joint_clearance: float = 0.1
     output_filename: str = "notes_holder.dxf"
 
-    @property
-    def front_height(self) -> float:
-        """Высота передней стенки после учёта открытости."""
-
-        return self.inner_height * (1.0 - self.front_opening_percent / 100.0)
-
     @classmethod
     def from_strings(
         cls,

@@ -23,12 +23,36 @@ def test_bottom_dimensions_match_inner_dimensions():
 
     assert bottom.width == pytest.approx(90.0)
     assert bottom.height == pytest.approx(65.0)
-    assert bottom.cutouts
+    assert bottom.cutouts == []
+    assert min(x for x, _ in bottom.outline) < 0
+    assert max(x for x, _ in bottom.outline) > bottom.width
 
 
-def test_front_wall_is_lower_than_back_wall():
+def test_front_wall_has_a_lower_central_opening():
     params = NotesHolderParameters(inner_height=40.0, front_opening_percent=35.0)
     parts = {part.name: part for part in build_parts(params)}
 
-    assert parts["front"].height == pytest.approx(26.0)
-    assert parts["front"].height < parts["back"].height
+    front = parts["front"]
+    central_points = [
+        y
+        for x, y in front.outline
+        if params.inner_width * 0.3 < x < params.inner_width * 0.7
+    ]
+    assert min(central_points) < parts["back"].height
+
+
+def test_cutouts_do_not_overlap_each_other():
+    def bounds(contour):
+        xs = [point[0] for point in contour]
+        ys = [point[1] for point in contour]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def overlaps(first, second):
+        ax1, ay1, ax2, ay2 = bounds(first)
+        bx1, by1, bx2, by2 = bounds(second)
+        return max(ax1, bx1) < min(ax2, bx2) and max(ay1, by1) < min(ay2, by2)
+
+    for part in build_parts(NotesHolderParameters()):
+        for index, first in enumerate(part.cutouts):
+            for second in part.cutouts[index + 1:]:
+                assert not overlaps(first, second), part.name
