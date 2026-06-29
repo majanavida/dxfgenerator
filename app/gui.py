@@ -6,6 +6,7 @@ from tkinter import messagebox, ttk
 
 from .dxf_export import export_dxf
 from .parameters import NotesHolderParameters
+from .svg_export import export_svg
 
 
 class NotesHolderApp:
@@ -23,7 +24,7 @@ class NotesHolderApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("NotesHolder — генератор DXF")
+        self.root.title("NotesHolder — генератор DXF и SVG")
         self.root.resizable(False, False)
         defaults = NotesHolderParameters()
 
@@ -53,28 +54,56 @@ class NotesHolderApp:
             row=filename_row, column=1, sticky="ew", padx=(12, 0), pady=3
         )
 
+        buttons = ttk.Frame(frame)
+        buttons.grid(
+            row=filename_row + 1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(8, 0),
+        )
+        buttons.columnconfigure((0, 1), weight=1)
         ttk.Button(
-            frame,
+            buttons,
             text="Сгенерировать DXF",
-            command=self.generate,
-        ).grid(row=filename_row + 1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+            command=self.generate_dxf,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ttk.Button(
+            buttons,
+            text="Сгенерировать SVG",
+            command=self.generate_svg,
+        ).grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
-    def generate(self) -> None:
-        """Прочитать форму и сохранить DXF в output/examples."""
+    def _read_parameters(self) -> NotesHolderParameters:
+        """Прочитать и проверить значения формы."""
+
+        return NotesHolderParameters.from_strings(
+            {name: variable.get() for name, variable in self.numeric_vars.items()},
+            output_filename=self.filename_var.get(),
+        )
+
+    def _generate(self, file_format: str) -> None:
+        """Сохранить выбранный формат в output/examples."""
 
         try:
-            params = NotesHolderParameters.from_strings(
-                {name: variable.get() for name, variable in self.numeric_vars.items()},
-                output_filename=self.filename_var.get(),
-            )
+            params = self._read_parameters()
             project_root = Path(__file__).resolve().parent.parent
             output_path = project_root / "output" / "examples" / params.output_filename
-            saved_path = export_dxf(params, output_path)
+            if file_format == "DXF":
+                saved_path = export_dxf(params, output_path)
+            else:
+                saved_path = export_svg(params, output_path)
         except (ValueError, OSError) as exc:
             messagebox.showerror("Ошибка", str(exc))
             return
 
-        messagebox.showinfo("Готово", f"DXF сохранён:\n{saved_path}")
+        messagebox.showinfo("Готово", f"{file_format} сохранён:\n{saved_path}")
+
+    def generate_dxf(self) -> None:
+        self._generate("DXF")
+
+    def generate_svg(self) -> None:
+        self._generate("SVG")
 
 
 def run_app() -> None:
