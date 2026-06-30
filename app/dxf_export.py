@@ -1,5 +1,3 @@
-"""Экспорт рассчитанных деталей в DXF при помощи ezdxf."""
-
 from pathlib import Path
 
 import ezdxf
@@ -13,8 +11,6 @@ def create_document(
     *,
     parts: list[Part] | None = None,
 ) -> ezdxf.document.Drawing:
-    """Создать DXF-документ с контурами на слое CUT."""
-
     document = ezdxf.new("R2010", setup=True)
     document.units = ezdxf.units.MM
     document.layers.add("CUT", color=1)
@@ -38,8 +34,6 @@ def create_document(
 
 
 def export_dxf(params: NotesHolderParameters, output_path: str | Path) -> Path:
-    """Сохранить готовый DXF и вернуть фактический путь."""
-
     path = Path(output_path)
     if path.suffix.lower() != ".dxf":
         path = path.with_suffix(".dxf")

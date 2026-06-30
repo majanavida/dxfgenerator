@@ -1,5 +1,3 @@
-"""Точка входа в приложение NotesHolder DXF Generator."""
-
 from app.gui import run_app
 
 

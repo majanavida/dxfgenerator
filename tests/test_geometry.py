@@ -1,6 +1,6 @@
 import pytest
 
-from app.geometry import build_parts
+from app.geometry import _finger_intervals, build_parts
 from app.parameters import NotesHolderParameters
 
 
@@ -56,3 +56,23 @@ def test_cutouts_do_not_overlap_each_other():
         for index, first in enumerate(part.cutouts):
             for second in part.cutouts[index + 1:]:
                 assert not overlaps(first, second), part.name
+
+
+def test_four_millimeter_bottom_tabs_match_open_wall_notches():
+    params = NotesHolderParameters(
+        material_thickness=4.0,
+        finger_width=6.0,
+        joint_clearance=0.1,
+    )
+    parts = {part.name: part for part in build_parts(params)}
+    intervals = _finger_intervals(
+        params.inner_width,
+        params.finger_width,
+        margin=params.material_thickness,
+    )
+
+    front_points = set(parts["front"].outline)
+    assert parts["front"].cutouts == []
+    for start, end in intervals:
+        assert (start - 0.05, 4.1) in front_points
+        assert (end + 0.05, 4.1) in front_points

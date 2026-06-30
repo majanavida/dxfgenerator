@@ -1,5 +1,3 @@
-"""Параметрическая геометрия деталей салфетницы NotesHolder."""
-
 from dataclasses import dataclass, replace
 from typing import Iterable
 
@@ -11,8 +9,6 @@ Contour = list[Point]
 
 @dataclass(frozen=True)
 class Part:
-    """Одна плоская деталь с внешним контуром и внутренними пазами."""
-
     name: str
     width: float
     height: float
@@ -26,8 +22,6 @@ def _finger_intervals(
     *,
     margin: float = 0.0,
 ) -> list[tuple[float, float]]:
-    """Равномерно разместить шипы, не заходя в угловые зоны."""
-
     length = abs(length)
     finger_width = max(abs(finger_width), 0.1)
     margin = min(max(margin, 0.0), length / 2.0)
@@ -56,8 +50,6 @@ def _tabbed_edge(
     finger_width: float,
     margin: float,
 ) -> Contour:
-    """Построить прямую кромку с прямоугольными наружными шипами."""
-
     x1, y1 = start
     x2, y2 = end
     dx, dy = x2 - x1, y2 - y1
@@ -96,14 +88,39 @@ def _rectangle(x: float, y: float, width: float, height: float) -> Contour:
     ]
 
 
+def _notched_bottom_edge(
+    length: float,
+    thickness: float,
+    finger_width: float,
+    clearance: float,
+) -> Contour:
+    notch_height = max(0.1, thickness + clearance)
+    points: Contour = []
+    for start, end in _finger_intervals(
+        length,
+        finger_width,
+        margin=thickness,
+    ):
+        notch_start = start - clearance / 2.0
+        notch_end = end + clearance / 2.0
+        points.extend(
+            [
+                (notch_start, 0.0),
+                (notch_start, notch_height),
+                (notch_end, notch_height),
+                (notch_end, 0.0),
+            ]
+        )
+    points.append((length, 0.0))
+    return points
+
+
 def _bottom_outline(
     width: float,
     depth: float,
     thickness: float,
     finger_width: float,
 ) -> Contour:
-    """Дно с наружными шипами по всем четырём сторонам, как в образце."""
-
     outline: Contour = [(0.0, 0.0)]
     outline.extend(
         _tabbed_edge(
@@ -154,12 +171,19 @@ def _wall_outline(
     thickness: float,
     finger_width: float,
     vertical_margin: float,
+    clearance: float,
     *,
     top_profile: Contour | None = None,
 ) -> Contour:
-    """Стенка с прямым низом и шипами на вертикальных торцах."""
-
-    outline: Contour = [(0.0, 0.0), (width, 0.0)]
+    outline: Contour = [(0.0, 0.0)]
+    outline.extend(
+        _notched_bottom_edge(
+            width,
+            thickness,
+            finger_width,
+            clearance,
+        )
+    )
     outline.extend(
         _tabbed_edge(
             (width, 0.0),
@@ -187,39 +211,24 @@ def _wall_outline(
     return outline
 
 
-def _bottom_connection_slots(
-    length: float,
-    params: NotesHolderParameters,
-) -> list[Contour]:
-    """Пазы стенки под соответствующие шипы дна."""
-
-    thickness = max(abs(params.material_thickness), 0.1)
-    clearance = params.joint_clearance
-    slot_depth = max(0.1, thickness + clearance)
-    slots: list[Contour] = []
-    for start, end in _finger_intervals(
-        length,
-        params.finger_width,
-        margin=thickness,
-    ):
-        slot_width = max(0.1, end - start + clearance)
-        slots.append(
-            _rectangle(
-                start - clearance / 2.0,
-                thickness,
-                slot_width,
-                slot_depth,
-            )
-        )
-    return slots
-
-
-def _side_outline(depth: float, height: float, thickness: float) -> Contour:
-    """Боковина с неглубоким центральным понижением верхней кромки."""
-
+def _side_outline(
+    depth: float,
+    height: float,
+    thickness: float,
+    finger_width: float,
+    clearance: float,
+) -> Contour:
     scoop = min(thickness * 2.0, height * 0.2)
-    return [
-        (0.0, 0.0),
+    outline: Contour = [(0.0, 0.0)]
+    outline.extend(
+        _notched_bottom_edge(
+            depth,
+            thickness,
+            finger_width,
+            clearance,
+        )
+    )
+    outline.extend([
         (depth, 0.0),
         (depth, height),
         (depth * 0.78, height),
@@ -227,7 +236,8 @@ def _side_outline(depth: float, height: float, thickness: float) -> Contour:
         (depth * 0.32, height - scoop),
         (depth * 0.22, height),
         (0.0, height),
-    ]
+    ])
+    return outline
 
 
 def _side_slots(
@@ -236,12 +246,10 @@ def _side_slots(
     params: NotesHolderParameters,
     vertical_margin: float,
 ) -> list[Contour]:
-    """Пазы боковины под дно, переднюю и заднюю стенки."""
-
     thickness = max(abs(params.material_thickness), 0.1)
     clearance = params.joint_clearance
     slot_depth = max(0.1, thickness + clearance)
-    slots = _bottom_connection_slots(depth, params)
+    slots: list[Contour] = []
 
     for start, end in _finger_intervals(
         height,
@@ -263,8 +271,6 @@ def _side_slots(
 
 
 def build_parts(params: NotesHolderParameters) -> list[Part]:
-    """Построить пять согласованных деталей в локальных координатах."""
-
     width = params.inner_width
     depth = params.inner_depth
     height = params.inner_height
@@ -305,9 +311,10 @@ def build_parts(params: NotesHolderParameters) -> list[Part]:
             thickness,
             params.finger_width,
             vertical_margin,
+            params.joint_clearance,
             top_profile=front_top,
         ),
-        cutouts=_bottom_connection_slots(width, params),
+        cutouts=[],
     )
     back = Part(
         name="back",
@@ -319,11 +326,18 @@ def build_parts(params: NotesHolderParameters) -> list[Part]:
             thickness,
             params.finger_width,
             vertical_margin,
+            params.joint_clearance,
         ),
-        cutouts=_bottom_connection_slots(width, params),
+        cutouts=[],
     )
 
-    side_outline = _side_outline(depth, height, thickness)
+    side_outline = _side_outline(
+        depth,
+        height,
+        thickness,
+        params.finger_width,
+        params.joint_clearance,
+    )
     side_cutouts = _side_slots(depth, height, params, vertical_margin)
     left = Part(
         name="left_side",
@@ -347,8 +361,6 @@ def _translate_contour(contour: Iterable[Point], dx: float, dy: float) -> Contou
 
 
 def translate_part(part: Part, dx: float, dy: float) -> Part:
-    """Перенести деталь на общей раскладке."""
-
     return replace(
         part,
         outline=_translate_contour(part.outline, dx, dy),
@@ -357,8 +369,6 @@ def translate_part(part: Part, dx: float, dy: float) -> Part:
 
 
 def layout_parts(parts: list[Part], spacing: float = 10.0) -> list[Part]:
-    """Разложить детали компактными рядами, близко к исходному SVG."""
-
     by_name = {part.name: part for part in parts}
     bottom = by_name["bottom"]
     front = by_name["front"]

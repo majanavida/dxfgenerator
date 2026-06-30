@@ -1,5 +1,3 @@
-"""Экспорт рассчитанных деталей в простой векторный SVG."""
-
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -21,8 +19,6 @@ def _path_data(
     max_y: float,
     padding: float,
 ) -> str:
-    """Преобразовать контур из декартовых координат в координаты SVG."""
-
     points = [
         (x - min_x + padding, max_y - y + padding)
         for x, y in contour
@@ -38,8 +34,6 @@ def create_svg(
     *,
     parts: list[Part] | None = None,
 ) -> ET.ElementTree:
-    """Создать SVG с теми же контурами и раскладкой, что и DXF."""
-
     arranged_parts = layout_parts(parts or build_parts(params))
     contours = [
         contour
@@ -63,7 +57,6 @@ def create_svg(
             "viewBox": f"0 0 {_number(width)} {_number(height)}",
         },
     )
-    root.append(ET.Comment("NotesHolder: contours for laser cutting"))
     cut_group = ET.SubElement(
         root,
         f"{{{SVG_NAMESPACE}}}g",
@@ -99,8 +92,6 @@ def create_svg(
 
 
 def export_svg(params: NotesHolderParameters, output_path: str | Path) -> Path:
-    """Сохранить SVG и вернуть фактический путь."""
-
     path = Path(output_path)
     if path.suffix.lower() != ".svg":
         path = path.with_suffix(".svg")

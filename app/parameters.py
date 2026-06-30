@@ -1,12 +1,8 @@
-"""Параметры салфетницы и простое преобразование значений GUI."""
-
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class NotesHolderParameters:
-    """Основные размеры изделия в миллиметрах."""
-
     inner_width: float = 78.0
     inner_depth: float = 78.0
     inner_height: float = 35.0
@@ -23,8 +19,6 @@ class NotesHolderParameters:
         *,
         output_filename: str,
     ) -> "NotesHolderParameters":
-        """Создать параметры из строк GUI с минимальной валидацией."""
-
         if not output_filename.strip():
             raise ValueError("Имя выходного файла не должно быть пустым.")
 

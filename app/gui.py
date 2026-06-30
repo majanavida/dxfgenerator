@@ -1,5 +1,3 @@
-"""Простой tkinter-интерфейс генератора."""
-
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -10,8 +8,6 @@ from .svg_export import export_svg
 
 
 class NotesHolderApp:
-    """Окно с параметрами и одной основной кнопкой."""
-
     FIELD_DEFINITIONS = (
         ("inner_width", "Длина (внутренняя ширина), мм"),
         ("inner_depth", "Глубина (внутренняя глубина), мм"),
@@ -75,16 +71,12 @@ class NotesHolderApp:
         ).grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
     def _read_parameters(self) -> NotesHolderParameters:
-        """Прочитать и проверить значения формы."""
-
         return NotesHolderParameters.from_strings(
             {name: variable.get() for name, variable in self.numeric_vars.items()},
             output_filename=self.filename_var.get(),
         )
 
     def _generate(self, file_format: str) -> None:
-        """Сохранить выбранный формат в output/examples."""
-
         try:
             params = self._read_parameters()
             project_root = Path(__file__).resolve().parent.parent
