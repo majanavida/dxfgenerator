@@ -16,5 +16,5 @@ def test_svg_is_created_with_five_part_groups(tmp_path):
     assert cut_group is not None
 
     part_groups = cut_group.findall(f"{{{SVG_NAMESPACE}}}g")
-    assert len(part_groups) == 5
+    assert len(part_groups) == 6
     assert root.findall(f".//{{{SVG_NAMESPACE}}}text") == []

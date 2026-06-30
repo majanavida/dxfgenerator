@@ -32,13 +32,13 @@ def _finger_intervals(
     count = max(1, round(usable_length / (finger_width * 2.0)))
     step = usable_length / count
     actual_width = min(finger_width, step * 0.65)
-    intervals: list[tuple[float, float]] = []
-    for index in range(count):
-        center = margin + step * (index + 0.5)
-        intervals.append(
-            (center - actual_width / 2.0, center + actual_width / 2.0)
+    return [
+        (
+            margin + step * (index + 0.5) - actual_width / 2.0,
+            margin + step * (index + 0.5) + actual_width / 2.0,
         )
-    return intervals
+        for index in range(count)
+    ]
 
 
 def _tabbed_edge(
@@ -88,50 +88,50 @@ def _rectangle(x: float, y: float, width: float, height: float) -> Contour:
     ]
 
 
-def _notched_bottom_edge(
-    length: float,
-    thickness: float,
-    finger_width: float,
-    clearance: float,
-) -> Contour:
-    notch_height = max(0.1, thickness + clearance)
-    points: Contour = []
-    for start, end in _finger_intervals(
-        length,
-        finger_width,
-        margin=thickness,
-    ):
-        notch_start = start - clearance / 2.0
-        notch_end = end + clearance / 2.0
-        points.extend(
-            [
-                (notch_start, 0.0),
-                (notch_start, notch_height),
-                (notch_end, notch_height),
-                (notch_end, 0.0),
-            ]
-        )
-    points.append((length, 0.0))
-    return points
-
-
 def _bottom_outline(
     width: float,
     depth: float,
     thickness: float,
     finger_width: float,
+    opening_fraction: float,
 ) -> Contour:
     outline: Contour = [(0.0, 0.0)]
-    outline.extend(
-        _tabbed_edge(
-            (0.0, 0.0),
-            (width, 0.0),
-            normal=(0.0, -1.0),
-            tab_depth=thickness,
-            finger_width=finger_width,
-            margin=thickness,
-        )
+    opening_width = width * opening_fraction
+    wing_width = (width - opening_width) / 2.0
+    wing_intervals = _finger_intervals(
+        wing_width,
+        finger_width,
+        margin=thickness,
     )
+    for start, end in wing_intervals:
+        outline.extend(
+            [
+                (start, 0.0),
+                (start, -thickness),
+                (end, -thickness),
+                (end, 0.0),
+            ]
+        )
+    outline.extend(
+        [
+            (wing_width, 0.0),
+            (wing_width, thickness * 3.0),
+            (width - wing_width, thickness * 3.0),
+            (width - wing_width, 0.0),
+        ]
+    )
+    for start, end in wing_intervals:
+        shifted_start = width - wing_width + start
+        shifted_end = width - wing_width + end
+        outline.extend(
+            [
+                (shifted_start, 0.0),
+                (shifted_start, -thickness),
+                (shifted_end, -thickness),
+                (shifted_end, 0.0),
+            ]
+        )
+    outline.append((width, 0.0))
     outline.extend(
         _tabbed_edge(
             (width, 0.0),
@@ -165,109 +165,216 @@ def _bottom_outline(
     return outline
 
 
-def _wall_outline(
-    width: float,
-    height: float,
+def _wall_slots(
+    length: float,
     thickness: float,
     finger_width: float,
-    vertical_margin: float,
     clearance: float,
     *,
-    top_profile: Contour | None = None,
-) -> Contour:
-    outline: Contour = [(0.0, 0.0)]
-    outline.extend(
-        _notched_bottom_edge(
-            width,
-            thickness,
-            finger_width,
-            clearance,
-        )
-    )
-    outline.extend(
-        _tabbed_edge(
-            (width, 0.0),
-            (width, height),
-            normal=(1.0, 0.0),
-            tab_depth=thickness,
-            finger_width=finger_width,
-            margin=vertical_margin,
-        )
-    )
-    if top_profile is None:
-        outline.append((0.0, height))
-    else:
-        outline.extend(top_profile[1:])
-    outline.extend(
-        _tabbed_edge(
-            (0.0, height),
-            (0.0, 0.0),
-            normal=(-1.0, 0.0),
-            tab_depth=thickness,
-            finger_width=finger_width,
-            margin=vertical_margin,
-        )
-    )
-    return outline
-
-
-def _side_outline(
-    depth: float,
-    height: float,
-    thickness: float,
-    finger_width: float,
-    clearance: float,
-) -> Contour:
-    scoop = min(thickness * 2.0, height * 0.2)
-    outline: Contour = [(0.0, 0.0)]
-    outline.extend(
-        _notched_bottom_edge(
-            depth,
-            thickness,
-            finger_width,
-            clearance,
-        )
-    )
-    outline.extend([
-        (depth, 0.0),
-        (depth, height),
-        (depth * 0.78, height),
-        (depth * 0.68, height - scoop),
-        (depth * 0.32, height - scoop),
-        (depth * 0.22, height),
-        (0.0, height),
-    ])
-    return outline
-
-
-def _side_slots(
-    depth: float,
-    height: float,
-    params: NotesHolderParameters,
-    vertical_margin: float,
+    connection_length: float | None = None,
+    offset: float = 0.0,
 ) -> list[Contour]:
-    thickness = max(abs(params.material_thickness), 0.1)
-    clearance = params.joint_clearance
-    slot_depth = max(0.1, thickness + clearance)
+    slot_height = max(0.1, thickness + clearance)
+    slot_y = thickness * 3.0
+    fitted_length = length if connection_length is None else connection_length
     slots: list[Contour] = []
-
     for start, end in _finger_intervals(
-        height,
-        params.finger_width,
-        margin=vertical_margin,
+        fitted_length,
+        finger_width,
+        margin=thickness,
     ):
-        slot_height = max(0.1, end - start + clearance)
-        y = start - clearance / 2.0
-        slots.append(_rectangle(thickness, y, slot_depth, slot_height))
         slots.append(
             _rectangle(
-                depth - thickness - slot_depth,
-                y,
-                slot_depth,
+                offset + start - clearance / 2.0,
+                slot_y,
+                max(0.1, end - start + clearance),
                 slot_height,
             )
         )
     return slots
+
+
+def _notched_edge(
+    start: Point,
+    end: Point,
+    *,
+    normal: Point,
+    notch_depth: float,
+    finger_width: float,
+    clearance: float,
+    margin: float,
+) -> Contour:
+    x1, y1 = start
+    x2, y2 = end
+    dx, dy = x2 - x1, y2 - y1
+    length = abs(dx) + abs(dy)
+    ux, uy = dx / length, dy / length
+    nx, ny = normal
+    points: Contour = []
+    for interval_start, interval_end in _finger_intervals(
+        length,
+        finger_width,
+        margin=margin,
+    ):
+        notch_start = interval_start - clearance / 2.0
+        notch_end = interval_end + clearance / 2.0
+        ax, ay = x1 + ux * notch_start, y1 + uy * notch_start
+        bx, by = x1 + ux * notch_end, y1 + uy * notch_end
+        points.extend(
+            [
+                (ax, ay),
+                (ax + nx * notch_depth, ay + ny * notch_depth),
+                (bx + nx * notch_depth, by + ny * notch_depth),
+                (bx, by),
+            ]
+        )
+    points.append(end)
+    return points
+
+
+def _full_wall_outline(
+    length: float,
+    height: float,
+    thickness: float,
+    finger_width: float,
+) -> Contour:
+    foot_height = thickness * 2.0
+    foot_width = min(finger_width * 2.0, length / 3.0)
+    edge_margin = thickness * 2.0
+    outline: Contour = [(0.0, height), (length, height)]
+    outline.extend(
+        _tabbed_edge(
+            (length, height),
+            (length, 0.0),
+            normal=(1.0, 0.0),
+            tab_depth=thickness,
+            finger_width=finger_width,
+            margin=edge_margin,
+        )
+    )
+    outline.extend(
+        [
+            (length - foot_width, 0.0),
+            (length - foot_width, foot_height),
+            (foot_width, foot_height),
+            (foot_width, 0.0),
+            (0.0, 0.0),
+        ]
+    )
+    outline.extend(
+        _tabbed_edge(
+            (0.0, 0.0),
+            (0.0, height),
+            normal=(-1.0, 0.0),
+            tab_depth=thickness,
+            finger_width=finger_width,
+            margin=edge_margin,
+        )
+    )
+    return outline
+
+
+def _side_wall_outline(
+    depth: float,
+    height: float,
+    thickness: float,
+    finger_width: float,
+    clearance: float,
+) -> Contour:
+    outer_depth = depth + thickness * 2.0
+    foot_height = thickness * 2.0
+    foot_width = min(finger_width * 2.0, outer_depth / 3.0)
+    edge_margin = thickness * 2.0
+    notch_depth = thickness + clearance
+    outline: Contour = [(0.0, height), (outer_depth, height)]
+    outline.extend(
+        _notched_edge(
+            (outer_depth, height),
+            (outer_depth, 0.0),
+            normal=(-1.0, 0.0),
+            notch_depth=notch_depth,
+            finger_width=finger_width,
+            clearance=clearance,
+            margin=edge_margin,
+        )
+    )
+    outline.extend(
+        [
+            (outer_depth - foot_width, 0.0),
+            (outer_depth - foot_width, foot_height),
+            (foot_width, foot_height),
+            (foot_width, 0.0),
+            (0.0, 0.0),
+        ]
+    )
+    outline.extend(
+        _notched_edge(
+            (0.0, 0.0),
+            (0.0, height),
+            normal=(1.0, 0.0),
+            notch_depth=notch_depth,
+            finger_width=finger_width,
+            clearance=clearance,
+            margin=edge_margin,
+        )
+    )
+    return outline
+
+
+def _front_wing_outline(
+    width: float,
+    height: float,
+    thickness: float,
+    finger_width: float,
+) -> Contour:
+    foot_height = thickness * 2.0
+    foot_width = min(finger_width * 2.0, width)
+    edge_margin = thickness * 2.0
+    outline: Contour = [
+        (0.0, height),
+        (width, height),
+        (width, foot_height),
+        (foot_width, foot_height),
+        (foot_width, 0.0),
+        (0.0, 0.0),
+    ]
+    outline.extend(
+        _tabbed_edge(
+            (0.0, 0.0),
+            (0.0, height),
+            normal=(-1.0, 0.0),
+            tab_depth=thickness,
+            finger_width=finger_width,
+            margin=edge_margin,
+        )
+    )
+    return outline
+
+
+def _front_wing_slots(
+    wing_width: float,
+    thickness: float,
+    finger_width: float,
+    clearance: float,
+) -> list[Contour]:
+    intervals = _finger_intervals(
+        wing_width,
+        finger_width,
+        margin=thickness,
+    )
+    return [
+        _rectangle(
+            start - clearance / 2.0,
+            thickness * 3.0,
+            end - start + clearance,
+            thickness + clearance,
+        )
+        for start, end in intervals
+    ]
+
+
+def _mirror_contour(contour: Contour, width: float) -> Contour:
+    return [(width - x, y) for x, y in contour]
 
 
 def build_parts(params: NotesHolderParameters) -> list[Part]:
@@ -276,84 +383,94 @@ def build_parts(params: NotesHolderParameters) -> list[Part]:
     height = params.inner_height
     thickness = max(abs(params.material_thickness), 0.1)
     clearance = max(params.joint_clearance, 0.0)
-    vertical_margin = thickness * 2.0 + clearance
+    panel_height = height + thickness * 4.0
+    opening_fraction = min(max(params.front_opening_percent / 100.0, 0.0), 0.9)
+    wing_width = width * (1.0 - opening_fraction) / 2.0
 
     bottom = Part(
         name="bottom",
         width=width,
         height=depth,
-        outline=_bottom_outline(width, depth, thickness, params.finger_width),
-        cutouts=[],
-    )
-
-    opening_fraction = min(max(params.front_opening_percent / 100.0, 0.0), 0.9)
-    opening_width = width * opening_fraction
-    wing_width = (width - opening_width) / 2.0
-    bridge_height = min(
-        height - thickness,
-        max(thickness * 3.0, height * 0.25),
-    )
-    front_top = [
-        (width, height),
-        (width - wing_width, height),
-        (width - wing_width, bridge_height),
-        (wing_width, bridge_height),
-        (wing_width, height),
-        (0.0, height),
-    ]
-    front = Part(
-        name="front",
-        width=width,
-        height=height,
-        outline=_wall_outline(
+        outline=_bottom_outline(
             width,
-            height,
+            depth,
             thickness,
             params.finger_width,
-            vertical_margin,
-            params.joint_clearance,
-            top_profile=front_top,
+            opening_fraction,
         ),
         cutouts=[],
     )
+
+    side_width = depth + thickness * 2.0
+    left_side = Part(
+        name="left_side",
+        width=side_width,
+        height=panel_height,
+        outline=_side_wall_outline(
+            depth,
+            panel_height,
+            thickness,
+            params.finger_width,
+            clearance,
+        ),
+        cutouts=_wall_slots(
+            side_width,
+            thickness,
+            params.finger_width,
+            clearance,
+            connection_length=depth,
+            offset=thickness,
+        ),
+    )
+    right_side = replace(left_side, name="right_side")
     back = Part(
         name="back",
         width=width,
-        height=height,
-        outline=_wall_outline(
+        height=panel_height,
+        outline=_full_wall_outline(
             width,
-            height,
+            panel_height,
             thickness,
             params.finger_width,
-            vertical_margin,
-            params.joint_clearance,
         ),
-        cutouts=[],
+        cutouts=_wall_slots(
+            width,
+            thickness,
+            params.finger_width,
+            clearance,
+        ),
     )
 
-    side_outline = _side_outline(
-        depth,
-        height,
+    left_wing_outline = _front_wing_outline(
+        wing_width,
+        panel_height,
         thickness,
         params.finger_width,
-        params.joint_clearance,
     )
-    side_cutouts = _side_slots(depth, height, params, vertical_margin)
-    left = Part(
-        name="left_side",
-        width=depth,
-        height=height,
-        outline=side_outline,
-        cutouts=side_cutouts,
+    left_wing_slots = _front_wing_slots(
+        wing_width,
+        thickness,
+        params.finger_width,
+        clearance,
     )
-    right = Part(
-        name="right_side",
-        width=depth,
-        height=height,
-        outline=list(side_outline),
-        cutouts=[list(contour) for contour in side_cutouts],
+    front_left = Part(
+        name="front_left",
+        width=wing_width,
+        height=panel_height,
+        outline=left_wing_outline,
+        cutouts=left_wing_slots,
     )
-    return [bottom, front, back, left, right]
+    front_right = Part(
+        name="front_right",
+        width=wing_width,
+        height=panel_height,
+        outline=_mirror_contour(left_wing_outline, wing_width),
+        cutouts=[
+            _mirror_contour(contour, wing_width)
+            for contour in left_wing_slots
+        ],
+    )
+    return [bottom, left_side, back, right_side, front_left, front_right]
 
 
 def _translate_contour(contour: Iterable[Point], dx: float, dy: float) -> Contour:
@@ -368,27 +485,29 @@ def translate_part(part: Part, dx: float, dy: float) -> Part:
     )
 
 
-def layout_parts(parts: list[Part], spacing: float = 10.0) -> list[Part]:
+def layout_parts(parts: list[Part], spacing: float = 1.5) -> list[Part]:
     by_name = {part.name: part for part in parts}
     bottom = by_name["bottom"]
-    front = by_name["front"]
+    left_side = by_name["left_side"]
     back = by_name["back"]
-    left = by_name["left_side"]
-    right = by_name["right_side"]
+    right_side = by_name["right_side"]
+    front_left = by_name["front_left"]
+    front_right = by_name["front_right"]
 
-    tab_depth = max(
-        abs(min(x for x, _ in bottom.outline)),
-        abs(min(y for _, y in bottom.outline)),
-    )
-    margin = spacing + tab_depth
-    first_wall_y = margin + bottom.height + tab_depth + spacing
-    second_wall_y = first_wall_y + max(left.height, back.height) + spacing
-    second_column_x = margin + max(bottom.width, left.width) + tab_depth + spacing
+    tab_depth = abs(min(x for x, _ in bottom.outline))
+    margin = 10.0
+    side_x = margin
+    bottom_x = margin + tab_depth
+    right_x = margin + left_side.width + spacing + tab_depth
+    lower_y = margin
+    upper_y = lower_y + max(right_side.height, front_left.height) + spacing
+    bottom_y = upper_y + max(left_side.height, back.height) + spacing + tab_depth
 
     return [
-        translate_part(bottom, margin, margin),
-        translate_part(left, margin, first_wall_y),
-        translate_part(right, margin, second_wall_y),
-        translate_part(back, second_column_x, first_wall_y),
-        translate_part(front, second_column_x, second_wall_y),
+        translate_part(bottom, bottom_x, bottom_y),
+        translate_part(left_side, side_x, upper_y),
+        translate_part(back, right_x, upper_y),
+        translate_part(right_side, side_x, lower_y),
+        translate_part(front_left, right_x, lower_y),
+        translate_part(front_right, right_x + front_left.width + spacing, lower_y),
     ]

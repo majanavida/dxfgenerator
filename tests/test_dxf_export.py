@@ -22,4 +22,4 @@ def test_dxf_is_created_with_required_layers(tmp_path):
         for entity in modelspace.query("LWPOLYLINE[layer=='CUT']")
         if entity.closed
     ]
-    assert len(outlines) >= 5
+    assert len(outlines) >= 6
